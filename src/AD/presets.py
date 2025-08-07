@@ -43,6 +43,19 @@ def get_train_loader(model_choice, batch_size, max_n_per_class, excluded_classes
 
         train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, collate_fn=custom_collate_BTS, generator=generator, sampler=sampler)    
     
+    elif model_choice == "ZTFSims":
+
+        # Load the training set
+        train_dataset = ZTF_SIM_LC_Dataset(ZTF_sim_train_parquet_path, include_lc_plots=False, max_n_per_class=max_n_per_class)
+
+        train_labels = train_dataset.get_all_labels()
+        class_weights = get_class_weights(train_labels)
+        train_weights = torch.from_numpy(np.array([class_weights[x] for x in train_labels]))
+        sampler = WeightedRandomSampler(train_weights, len(train_weights))
+
+        train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, collate_fn=custom_collate_ZTF_SIM, generator=generator, sampler=sampler)
+
+
     return train_dataloader, train_labels
 
 
@@ -63,6 +76,17 @@ def get_val_loader(model_choice, batch_size, excluded_classes=[]):
 
         val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, collate_fn=custom_collate_BTS, generator=generator, sampler=sampler)
 
+    elif model_choice == "ZTFSims":
+
+        val_dataset = ZTF_SIM_LC_Dataset(ZTF_sim_val_parquet_path,  excluded_classes=excluded_classes)
+
+        val_labels = val_dataset.get_all_labels()
+        class_weights = get_class_weights(val_labels)
+        train_weights = torch.from_numpy(np.array([class_weights[x] for x in val_labels]))
+        sampler = WeightedRandomSampler(train_weights, len(train_weights))
+
+        val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, collate_fn=custom_collate_ZTF_SIM, generator=generator)
+
     val_labels = val_dataset.get_all_labels()
     return val_dataloader, val_labels
 
@@ -75,6 +99,11 @@ def get_test_loaders(model_choice, batch_size, max_n_per_class, excluded_classes
 
         test_dataset = BTS_LC_Dataset(BTS_test_parquet_path, include_lc_plots=False, max_n_per_class=max_n_per_class, excluded_classes=excluded_classes)
         test_dataloader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True, collate_fn=custom_collate_BTS, generator=generator)
+
+    elif model_choice == "ZTFSims":
+
+        test_dataset = ZTF_SIM_LC_Dataset(ZTF_sim_test_parquet_path, include_lc_plots=False, max_n_per_class=max_n_per_class)
+        test_dataloader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True, collate_fn=custom_collate_ZTF_SIM, generator=generator)
 
     return test_dataloader
 
