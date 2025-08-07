@@ -8,13 +8,13 @@ from torchvision.models import swin_v2_b
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 import torch.nn.functional as F
 
-from AD.trainer import Trainer
-from AD.tester import Tester
+# from AD.trainer import Trainer
+# from AD.tester import Tester
 
 swin_v2_b_output_dim = 1000
 
 # Template for the Hierarchical Classifier
-class Classifier(nn.Module, Trainer, Tester):
+class Classifier(nn.Module):
 
     def __init__(self):
 
