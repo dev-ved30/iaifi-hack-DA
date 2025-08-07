@@ -1,6 +1,6 @@
 import torch
 
-from torch.utils.data import DataLoader, ConcatDataset
+from torch.utils.data import DataLoader, WeightedRandomSampler
 
 from AD.architectures import *
 from AD.custom_datasets.BTS import *
@@ -8,6 +8,16 @@ from AD.custom_datasets.ZTF_sims import *
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 torch.set_default_device(device)
+
+def get_class_weights(labels):
+
+    classes, counts = np.unique(labels, return_counts=True)
+    weights = {}
+
+    for c, n in zip(classes, counts):
+        weights[c] = 1/n
+
+    return weights
 
 def get_model(model_choice):
 
@@ -25,9 +35,14 @@ def get_train_loader(model_choice, batch_size, max_n_per_class, excluded_classes
 
         # Load the training set
         train_dataset = BTS_LC_Dataset(BTS_train_parquet_path, max_n_per_class=max_n_per_class, excluded_classes=excluded_classes)
-        train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, collate_fn=custom_collate_BTS, generator=generator)
 
-    train_labels = train_dataset.get_all_labels()
+        train_labels = train_dataset.get_all_labels()
+        class_weights = get_class_weights(train_labels)
+        train_weights = torch.from_numpy(np.array([class_weights[x] for x in train_labels]))
+        sampler = WeightedRandomSampler(train_weights, len(train_weights))
+
+        train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, collate_fn=custom_collate_BTS, generator=generator, sampler=sampler)    
+    
     return train_dataloader, train_labels
 
 
@@ -40,7 +55,13 @@ def get_val_loader(model_choice, batch_size, excluded_classes=[]):
 
         # Load the validation set
         val_dataset = BTS_LC_Dataset(BTS_val_parquet_path, excluded_classes=excluded_classes)
-        val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, collate_fn=custom_collate_BTS, generator=generator)
+
+        val_labels = val_dataset.get_all_labels()
+        class_weights = get_class_weights(val_labels)
+        train_weights = torch.from_numpy(np.array([class_weights[x] for x in val_labels]))
+        sampler = WeightedRandomSampler(train_weights, len(train_weights))
+
+        val_dataloader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, collate_fn=custom_collate_BTS, generator=generator, sampler=sampler)
 
     val_labels = val_dataset.get_all_labels()
     return val_dataloader, val_labels
