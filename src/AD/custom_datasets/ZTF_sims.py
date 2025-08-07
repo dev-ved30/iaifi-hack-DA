@@ -51,7 +51,7 @@ n_book_keeping_features = len(book_keeping_feature_list)
 
 class ZTF_SIM_LC_Dataset(torch.utils.data.Dataset):
 
-    def __init__(self, parquet_file_path, max_n_per_class=None, include_lc_plots=False, transform=None):
+    def __init__(self, parquet_file_path, max_n_per_class=None, include_lc_plots=False, transform=None, excluded_classes=[]):
         super(ZTF_SIM_LC_Dataset, self).__init__()
 
         # Columns to be read from the parquet file
@@ -61,6 +61,7 @@ class ZTF_SIM_LC_Dataset(torch.utils.data.Dataset):
         self.transform = transform
         self.include_lc_plots = include_lc_plots
         self.max_n_per_class = max_n_per_class
+        self.excluded_classes = excluded_classes
 
         print(f'Loading dataset from {self.parquet_file_path}\n')
         self.parquet_df = pl.read_parquet(self.parquet_file_path, columns=self.columns)
@@ -69,6 +70,7 @@ class ZTF_SIM_LC_Dataset(torch.utils.data.Dataset):
         self.print_dataset_composition()
 
         self.clean_up_dataset()
+        self.exclude_classes()
 
         if self.max_n_per_class != None:
             self.limit_max_samples_per_class()
@@ -193,6 +195,21 @@ class ZTF_SIM_LC_Dataset(torch.utils.data.Dataset):
             class_df = self.parquet_df.filter(pl.col("class") == c).slice(0, self.max_n_per_class)
             class_dfs.append(class_df)
             print(f"{c}: {class_df.shape[0]}")
+
+        self.parquet_df = pl.concat(class_dfs)
+
+    def exclude_classes(self):
+
+        print(f"Excluding {self.excluded_classes} from the dataset...")
+
+        class_dfs = []
+        unique_classes = np.unique(self.parquet_df['class'])
+
+        for c in unique_classes:
+
+            if c not in self.excluded_classes:
+                class_df = self.parquet_df.filter(pl.col("class") == c)
+                class_dfs.append(class_df)
 
         self.parquet_df = pl.concat(class_dfs)
 
