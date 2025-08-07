@@ -1,0 +1,13 @@
+data/
+.DS_Store
+temp.py
+__pycache__
+
+src/AD.egg-info
+
+src/AD/__pycache__/
+src/AD/*/__pycache__/
+
+models/*/plots
+models/*/reports
+models/.DS_Store
