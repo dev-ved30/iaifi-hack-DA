@@ -24,6 +24,7 @@ dependencies = [
     "wandb==0.20.1",
     "scikit-learn==1.6.1",
     "umap-learn==0.5.8",
+    "geomloss==0.2.6",
 ]
 
 [build-system]
