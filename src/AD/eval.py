@@ -120,8 +120,8 @@ def plot_latent_space(model_fn, save_fn):
     """
     model = load_model(model_fn)
 
-    bts_dataloader = get_test_loaders("BTS", 128, None, excluded_classes=['Anomaly'])
-    ztf_dataloader = get_test_loaders("ZTF_Sims", 128, None, excluded_classes=['Anomaly'])
+    bts_dataloader = get_test_loaders("BTS-lite", 128, None, excluded_classes=['Anomaly'])
+    ztf_dataloader = get_test_loaders("ZTFSims", 128, None, excluded_classes=['Anomaly'])
 
     for k in bts_dataloader:
         latent, _ = model(k)
