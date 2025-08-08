@@ -326,8 +326,8 @@ def train_SIDDA(
                         val_DA_loss += DA_loss_.item()
 
                     _, source_predicted = torch.max(source_preds.data, 1)
-                    y_pred.extend(source_predicted)
-                    y_true.extend(source_outputs)
+                    y_pred += source_predicted.cpu().tolist()
+                    y_true += source_outputs.cpu().tolist()
 
                     source_total += len(source_outputs)
                     source_correct += (source_predicted == source_outputs).sum().item()
