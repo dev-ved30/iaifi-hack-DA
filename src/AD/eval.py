@@ -184,8 +184,23 @@ def plot_latent_space(model_fn, save_fn):
     ax.set_xlabel('UMAP 1')
     ax.set_ylabel('UMAP 2')
     plt.savefig("../../data/test_latent.pdf", bbox_inches='tight')
+    plt.close()
 
 
+def plot_eta_evolution(eta1_fn, eta2_fn):
+    """Plot how eta evolves for each loss term.
+    """
+    eta1 = np.load(eta1_fn)
+    eta2 = np.load(eta2_fn)
+    epoch = np.arange(len(eta1))
+    
+    fig, ax = plt.subplots()
+    ax.plot(epoch, eta1, label=r'$\eta_1$')
+    ax.plot(epoch, eta2, label=r'$\eta_2$')
+    ax.legend()
+    ax.set_label("Epoch")
+    plt.savefig("../../data/eta_evolution.pdf")
+    plt.close()
 
 
 # %%
@@ -201,8 +216,23 @@ if __name__ == "__main__":
             )
         ), 'data', 'best_model_val_f1.pt'
     )
+    eta1_fn = os.path.join(
+        os.path.dirname(
+                os.path.dirname(
+                    os.path.dirname(__file__)
+            )
+        ), 'data', 'eta_1_vals-ORACLE_DA.npy'
+    )
+    eta2_fn = os.path.join(
+        os.path.dirname(
+                os.path.dirname(
+                    os.path.dirname(__file__)
+            )
+        ), 'data', 'eta_2_vals-ORACLE_DA.npy'
+    )
         
-    plot_latent_space(model_fn, 'test.png')
+    #plot_latent_space(model_fn, 'test.png')
+    plot_eta_evolution(eta1_fn, eta2_fn)
     """
     import pandas as pd
     import matplotlib.pyplot as plt
