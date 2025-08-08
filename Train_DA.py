@@ -15,6 +15,9 @@ from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from sklearn.metrics import f1_score
 
 
+EXCLUDED_CLASSES = ['Anomaly', 'CV']
+NUM_CLASSES = 5
+
 device = "cuda" if torch.cuda.is_available() else "cpu"
 print(f"Using {device} device")
 torch.set_default_device(device)
@@ -25,11 +28,11 @@ torch.set_default_device(device)
 
 from AD.presets import get_train_loader, get_val_loader
 
-target_train_loader, _ = get_train_loader('BTS-lite',256,None,excluded_classes=['Anomaly'])
-target_val_loader, _ = get_val_loader('BTS-lite',256,excluded_classes=['Anomaly'])
+target_train_loader, _ = get_train_loader('BTS-lite',256,None,excluded_classes=EXCLUDED_CLASSES)
+target_val_loader, _ = get_val_loader('BTS-lite',256,excluded_classes=EXCLUDED_CLASSES)
 
-source_train_loader, _ = get_train_loader('ZTFSims',256,None,excluded_classes=['Anomaly'])
-source_val_loader, _ = get_val_loader('ZTFSims',256,excluded_classes=['Anomaly'])
+source_train_loader, _ = get_train_loader('ZTFSims',256,None,excluded_classes=EXCLUDED_CLASSES)
+source_val_loader, _ = get_val_loader('ZTFSims',256,excluded_classes=EXCLUDED_CLASSES)
 
 
 # In[ ]:
@@ -133,10 +136,12 @@ def train_SIDDA(
 
     print("Training Started!")
 
-    eta_1 = torch.nn.Parameter(torch.tensor(1.0, device=device))
-    eta_2 = torch.nn.Parameter(torch.tensor(1.0, device=device))
+    #eta_1 = torch.nn.Parameter(torch.tensor(1.0, device=device))
+    #eta_2 = torch.nn.Parameter(torch.tensor(1.0, device=device))
+    eta_1 = 1.0
+    eta_2 = 1.0
 
-    optimizer.add_param_group({"params": [eta_1, eta_2]})
+    #optimizer.add_param_group({"params": [eta_1, eta_2]})
 
     for epoch in range(epochs):
         model.train()
@@ -204,10 +209,10 @@ def train_SIDDA(
 
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=10.0)
-            eta_1.data.clamp_(min=1e-3)
-            eta_2.data.clamp_(min=0.25 * eta_1.data.item())
-            eta_1_vals.append(eta_1.item())
-            eta_2_vals.append(eta_2.item())
+            #eta_1.data.clamp_(min=1e-3)
+            #eta_2.data.clamp_(min=0.25 * eta_1)#.data.item())
+            eta_1_vals.append(eta_1)#.item())
+            eta_2_vals.append(eta_2)#.item())
             optimizer.step()
 
             train_loss += loss.item()
@@ -235,9 +240,11 @@ def train_SIDDA(
         steps.append(epoch + 1)
 
         if epoch >= warmup:
+            """
             print(
                 f"Epoch: {epoch + 1}, eta_1: {eta_1.item():.4f}, eta_2: {eta_2.item():.4f}"
             )
+            """
             print(f"Epoch: {epoch + 1}, Max Distance: {max_distance:.4f}")
 
         if epoch < warmup:
@@ -326,8 +333,8 @@ def train_SIDDA(
                         val_DA_loss += DA_loss_.item()
 
                     _, source_predicted = torch.max(source_preds.data, 1)
-                    y_pred.extend(source_predicted)
-                    y_true.extend(source_outputs)
+                    y_pred += source_predicted.cpu().tolist()
+                    y_true += source_outputs.cpu().tolist()
 
                     source_total += len(source_outputs)
                     source_correct += (source_predicted == source_outputs).sum().item()
@@ -391,6 +398,8 @@ def train_SIDDA(
 
             else:
                 no_improvement_count += 1
+
+            torch.save(model.eval().module.state_dict(), os.path.join(save_dir, f"epoch_{epoch}.pt"))
 
             if source_val_acc >= best_val_acc:
                 best_val_acc = source_val_acc
@@ -723,7 +732,7 @@ class GRU(Classifier):
 # In[10]:
 
 
-model = GRU(6)
+model = GRU(NUM_CLASSES)
 opt = torch.optim.AdamW(model.parameters(),1e-3)
 
 

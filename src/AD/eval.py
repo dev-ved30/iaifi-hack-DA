@@ -3,7 +3,10 @@
 import numpy as np
 import pandas as pd
 import torch
+import seaborn as sns
 import matplotlib.pyplot as plt
+from palettable.cartocolors.qualitative import Vivid_6
+import umap
 from sklearn.metrics import (
     roc_curve,
     auc,
@@ -15,6 +18,9 @@ from sklearn.metrics import (
 from sklearn.preprocessing import label_binarize
 from AD.architectures import GRU
 from AD.presets import get_test_loaders
+
+EXCLUDED_CLASSES = ['Anomaly', 'CV']
+NUM_CLASSES = 5
 
 # Functions
 def plot_multiclass_roc(df_probs, true_labels, class_names=None):
@@ -109,7 +115,7 @@ def generate_classification_report(df_probs, true_labels, class_names=None):
 
 def load_model(model_fn):
     """Load model from state dict."""
-    model = GRU(6)
+    model = GRU(NUM_CLASSES)
     model.load_state_dict(torch.load(model_fn, map_location=torch.device('cpu')), strict=False)
     model.eval
     return model
@@ -120,19 +126,80 @@ def plot_latent_space(model_fn, save_fn):
     """
     model = load_model(model_fn)
 
-    bts_dataloader = get_test_loaders("BTS-lite", 128, None, excluded_classes=['Anomaly'])
-    ztf_dataloader = get_test_loaders("ZTFSims", 128, None, excluded_classes=['Anomaly'])
+    bts_dataloader = get_test_loaders("BTS-lite", 128, None, excluded_classes=EXCLUDED_CLASSES)
+    ztf_dataloader = get_test_loaders("ZTFSims", 128, None, excluded_classes=EXCLUDED_CLASSES)
+
+    ztf_latents, bts_latents = [], []
+    ztf_labels, bts_labels = [], []
+    for k in ztf_dataloader:
+        ztf_labels.extend(k['label'])
+        latent, _ = model(k)
+        ztf_latents.append(latent)
+    ztf_latents = torch.cat(ztf_latents, dim=0)
 
     for k in bts_dataloader:
+        bts_labels.extend(k['label'])
         latent, _ = model(k)
-        print(latent)
-    # separate out model up to encoding layer
-    # out_source = encoder(source)
-    # out_target = encoder(target)
-    # get source labels and target labels
-    # get unique classes --> color map
-    # plot source and target outputs
+        bts_latents.append(latent)
+    bts_latents = torch.cat(bts_latents, dim=0)
+    unique_labels, ztf_classes = np.unique(ztf_labels, return_inverse = True)
+    unique_labels, bts_classes = np.unique(bts_labels, return_inverse = True)
 
+    # apply UMAP
+    trans = umap.UMAP(n_neighbors=5, random_state=42).fit_transform(np.vstack([ztf_latents.cpu().detach().numpy(), bts_latents.cpu().detach().numpy()]))
+
+    ztf_umap = trans[:len(ztf_latents)]
+    bts_umap = trans[len(ztf_latents):]
+
+    fig, ax = plt.subplots()
+    ax.set_prop_cycle('color', Vivid_6.mpl_colors)
+
+    # plot source and target outputs
+    for i, l in enumerate(unique_labels):
+        ztf_umap_masked = ztf_umap[ztf_classes == i]
+        ztf_umap_df = pd.DataFrame(ztf_umap_masked, columns=['umap1', 'umap2'])
+        sns.kdeplot(
+            data=ztf_umap_df,
+            x="umap1", y="umap2",
+            levels=5,
+            label=l,
+            fill=True,
+            alpha=0.5,
+            ax=ax
+        )
+
+    for i, l in enumerate(unique_labels):
+        bts_umap_masked = bts_umap[bts_classes == i][:500]
+        ax.scatter(bts_umap_masked[:,0], bts_umap_masked[:,1], s=20, marker='*', label=l)
+
+    handles, _ = ax.get_legend_handles_labels()
+    num_handles = len(handles)
+    num_rows = (num_handles + 6 - 1) // 6
+    ax.legend(
+        loc="lower center",
+        bbox_to_anchor=(0.5, -0.25 - 0.05 * num_rows),
+        ncol=6,
+    )
+    ax.set_xlabel('UMAP 1')
+    ax.set_ylabel('UMAP 2')
+    plt.savefig("../../data/test_latent.pdf", bbox_inches='tight')
+    plt.close()
+
+
+def plot_eta_evolution(eta1_fn, eta2_fn):
+    """Plot how eta evolves for each loss term.
+    """
+    eta1 = np.load(eta1_fn)
+    eta2 = np.load(eta2_fn)
+    epoch = np.arange(len(eta1))
+    
+    fig, ax = plt.subplots()
+    ax.plot(epoch, eta1, label=r'$\eta_1$')
+    ax.plot(epoch, eta2, label=r'$\eta_2$')
+    ax.legend()
+    ax.set_label("Epoch")
+    plt.savefig("../../data/eta_evolution.pdf")
+    plt.close()
 
 
 # %%
@@ -146,10 +213,25 @@ if __name__ == "__main__":
                 os.path.dirname(
                     os.path.dirname(__file__)
             )
-        ), 'data', 'best_model_classification_loss.pt'
+        ), 'data', 'best_model_val_f1.pt'
+    )
+    eta1_fn = os.path.join(
+        os.path.dirname(
+                os.path.dirname(
+                    os.path.dirname(__file__)
+            )
+        ), 'data', 'eta_1_vals-ORACLE_DA.npy'
+    )
+    eta2_fn = os.path.join(
+        os.path.dirname(
+                os.path.dirname(
+                    os.path.dirname(__file__)
+            )
+        ), 'data', 'eta_2_vals-ORACLE_DA.npy'
     )
         
-    plot_latent_space(model_fn, 'test.png')
+    #plot_latent_space(model_fn, 'test.png')
+    plot_eta_evolution(eta1_fn, eta2_fn)
     """
     import pandas as pd
     import matplotlib.pyplot as plt
