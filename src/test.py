@@ -25,19 +25,15 @@ torch.set_default_device(device)
 BTS_test_parquet_path = "/Users/zhaoyifan/Downloads/BTS/test.parquet"
 ZTF_sim_test_parquet_path = "/Users/zhaoyifan/Downloads/ZTF_Sims/test.parquet"
 
-# Define a fixed list of all possible classes
-CLASSES = ['AGN','CV','SLSN-I','SN-II','SN-Ia','SN-Ib/c']
-CLASS_TO_IDX = {cls_name: i for i, cls_name in enumerate(CLASSES)}
-
 # Custom collate function to correctly pad and convert string labels to integers
-def pad_collate_fn(batch):
+def pad_collate_fn(batch, class_to_idx):
     ts_list = [item['ts'] for item in batch]
     static_list = [item['static'] for item in batch]
     labels = [item['label'] for item in batch]
     
     lengths = [len(ts) for ts in ts_list]
 
-    numerical_labels = [CLASS_TO_IDX[label] for label in labels]
+    numerical_labels = [class_to_idx[label] for label in labels]
     
     padded_ts = pad_sequence(ts_list, batch_first=True, padding_value= -999.0)
     labels_tensor = torch.tensor(numerical_labels)
@@ -46,26 +42,26 @@ def pad_collate_fn(batch):
     # Pad static features to a consistent size
     padded_static_list = []
     
-    max_dims = max(s.dim() for s in static_list) if static_list else 0
-    max_sizes = [max(s.size(d) for s in static_list if s.dim() > d) for d in range(max_dims)]
+    if static_list:
+        max_dims = max(s.dim() for s in static_list)
+        max_sizes = [max(s.size(d) for s in static_list if s.dim() > d) for d in range(max_dims)]
 
-    for s in static_list:
-        # Reshape tensor to match max_dims
-        while s.dim() < max_dims:
-            s = s.unsqueeze(-1)
-        
-        pad_dims = []
-        for d in range(s.dim()):
-            pad_dims.extend([0, max_sizes[d] - s.size(d)])
-        
-        pad_dims = pad_dims[::-1]
-        padded_s = torch.nn.functional.pad(s, pad_dims, "constant", 0)
-        padded_static_list.append(padded_s)
+        for s in static_list:
+            # Reshape tensor to match max_dims
+            while s.dim() < max_dims:
+                s = s.unsqueeze(-1)
+            
+            pad_dims = []
+            for d in range(s.dim()):
+                pad_dims.extend([0, max_sizes[d] - s.size(d)])
+            
+            pad_dims = pad_dims[::-1]
+            padded_s = torch.nn.functional.pad(s, pad_dims, "constant", 0)
+            padded_static_list.append(padded_s)
 
-    if padded_static_list:
         static_tensor = torch.stack(padded_static_list)
     else:
-        static_tensor = torch.empty((len(batch), *max_sizes))
+        static_tensor = torch.empty((len(batch), 0))
 
     return {
         'ts': padded_ts,
@@ -74,9 +70,9 @@ def pad_collate_fn(batch):
         'length': lengths_tensor
     }
 
-def load_model(model_fn):
-    """Load model from state dict."""
-    model = GRU(6)
+def load_model(model_fn, num_classes):
+    """Load model from state dict, with a dynamic number of classes."""
+    model = GRU(num_classes)
     model.load_state_dict(torch.load(model_fn, map_location=torch.device('cpu')), strict=False)
     model.eval()
     return model
@@ -109,6 +105,7 @@ def compute_metrics(
         y_pred.extend(predicted_class.cpu().numpy())
         y_true.extend(batch['label'].cpu().numpy())
         
+    # Corrected line: use the y_true list, not y_pred
     y_pred, y_true = np.asarray(y_pred), np.asarray(y_true)
     feature_maps = np.asarray(feature_maps)
     flattened_features = feature_maps.reshape(feature_maps.shape[0], -1)
@@ -154,12 +151,12 @@ def compute_metrics(
 if __name__ == "__main__":
     
     # Get the datasets from presets.py
-    bts_dataset = get_test_loaders("BTS-lite", batch_size=128, max_n_per_class=None, excluded_classes=['Anomaly']).dataset
-    ztf_dataset = get_test_loaders("ZTFSims", batch_size=128, max_n_per_class=None, excluded_classes=['Anomaly']).dataset
+    bts_dataset = get_test_loaders("BTS-lite", batch_size=128, max_n_per_class=None, excluded_classes=['Anomaly','CV']).dataset
+    ztf_dataset = get_test_loaders("ZTFSims", batch_size=128, max_n_per_class=None, excluded_classes=['Anomaly','CV']).dataset
 
-    # Filter out 'Anomaly' labels using Subset
-    bts_indices = [i for i, label in enumerate(bts_dataset.get_all_labels()) if label != 'Anomaly']
-    ztf_indices = [i for i, label in enumerate(ztf_dataset.get_all_labels()) if label != 'Anomaly']
+    # Filter out 'Anomaly' and 'CV' labels using Subset
+    bts_indices = [i for i, label in enumerate(bts_dataset.get_all_labels()) if label not in ['Anomaly', 'CV']]
+    ztf_indices = [i for i, label in enumerate(ztf_dataset.get_all_labels()) if label not in ['Anomaly', 'CV']]
     
     bts_filtered_dataset = Subset(bts_dataset, bts_indices)
     ztf_filtered_dataset = Subset(ztf_dataset, ztf_indices)
@@ -167,21 +164,29 @@ if __name__ == "__main__":
     # Concatenate the filtered datasets
     all_datasets = ConcatDataset([bts_filtered_dataset, ztf_filtered_dataset])
     
-    # Create a single DataLoader using the custom pad_collate_fn
+    # Dynamically discover the actual classes in the combined dataset
+    actual_labels = sorted(list(set(item['label'] for item in all_datasets)))
+    CLASSES = actual_labels
+    CLASS_TO_IDX = {cls_name: i for i, cls_name in enumerate(CLASSES)}
+    
+    # Create a single DataLoader using the custom pad_collate_fn and new CLASS_TO_IDX
     test_dataloader = DataLoader(all_datasets, batch_size=128, shuffle=False,
-                                 collate_fn=pad_collate_fn)
+                                 collate_fn=lambda batch: pad_collate_fn(batch, CLASS_TO_IDX))
     
-    # Use the fixed CLASSES list for the classification report
+    # Use the dynamically created CLASSES list for the classification report
     class_names = tuple(CLASSES)
-    print(class_names)
+    print(f"Discovered classes: {class_names}")
+
+    model_path = '/Users/zhaoyifan/Downloads/best_model_val_f1.pt'
     
-    model_path = '/Users/zhaoyifan/Downloads/AD_models/best_model_classification_loss.pt'
+    num_classes = len(class_names)
+    print(f"Initializing GRU model with {num_classes} output classes.")
+    model = load_model(model_path, num_classes)
     
-    model = load_model(model_path)
     if not model:
         print("Model could not be loaded.")
     print("Model loaded successfully")
-    save_dir = './results'
+    save_dir = '/Users/zhaoyifan/iaifi-hack-DA/results'
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
     full_report = compute_metrics(
