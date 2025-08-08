@@ -21,18 +21,18 @@ class Classifier(nn.Module):
         nn.Module.__init__(self)
 
     def predict_conditional_probabilities(self, batch):
-        
+
         logits = self.forward(batch)
         conditional_probabilities = F.softmax(logits, dim=-1).detach()
         return conditional_probabilities
-    
+
     def predict_conditional_probabilities_df(self, batch):
 
         level_order_nodes = self.one_hot_encoder.categories_[0]
         conditional_probabilities = self.predict_conditional_probabilities(batch)
         df = pd.DataFrame(conditional_probabilities, columns=level_order_nodes)
         return df
-    
+
     def get_latent_space_embeddings(self, batch):
 
         raise NotImplementedError
@@ -142,7 +142,7 @@ class GRU(Classifier):
         self.tanh = nn.Tanh()
         self.relu = nn.ReLU()
 
-    def get_latent_space_embeddings(self, batch):
+    def get_latent_space_embeddings(self,batch):
 
         x_ts = batch['ts'] # (batch_size, seq_len, n_ts_features)
         lengths = batch['length'] # (batch_size)
@@ -166,18 +166,18 @@ class GRU(Classifier):
         dense2 = self.tanh(dense2)
 
         x = self.dense3(dense2)
-        return x
+        return x, gru_out
 
     def forward(self, batch):
 
         # Get the latent space embedding
-        x = self.get_latent_space_embeddings(batch)
+        x_s, gru_out_s = self.get_latent_space_embeddings(batch)
 
         # Final step to produce logits
-        x = self.relu(x)
-        logits = self.fc_out(x)
+        x_s = self.relu(x_s)
+        logits_s = self.fc_out(x_s)
 
-        return logits
+        return gru_out_s, logits_s
     
 class GRU_MM(Classifier):
 

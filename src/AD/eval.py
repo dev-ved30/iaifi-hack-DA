@@ -2,6 +2,7 @@
 # Imports
 import numpy as np
 import pandas as pd
+import torch
 import matplotlib.pyplot as plt
 from sklearn.metrics import (
     roc_curve,
@@ -12,6 +13,8 @@ from sklearn.metrics import (
     ConfusionMatrixDisplay
 )
 from sklearn.preprocessing import label_binarize
+from AD.architectures import GRU
+from AD.presets import get_test_loaders
 
 # Functions
 def plot_multiclass_roc(df_probs, true_labels, class_names=None):
@@ -104,42 +107,82 @@ def generate_classification_report(df_probs, true_labels, class_names=None):
     report = classification_report(y_true_idx, y_pred, target_names=class_names)
     return report
 
+def load_model(model_fn):
+    """Load model from state dict."""
+    model = GRU(6)
+    model.load_state_dict(torch.load(model_fn, map_location=torch.device('cpu')), strict=False)
+    model.eval
+    return model
+
+def plot_latent_space(model_fn, save_fn):
+    """Plot latent spaces of source and target distributions,
+    color-coded by class.
+    """
+    model = load_model(model_fn)
+
+    bts_dataloader = get_test_loaders("BTS", 128, None, excluded_classes=['Anomaly'])
+    ztf_dataloader = get_test_loaders("ZTF_Sims", 128, None, excluded_classes=['Anomaly'])
+
+    for k in bts_dataloader:
+        latent, _ = model(k)
+        print(latent)
+    # separate out model up to encoding layer
+    # out_source = encoder(source)
+    # out_target = encoder(target)
+    # get source labels and target labels
+    # get unique classes --> color map
+    # plot source and target outputs
+
+
 
 # %%
 
 # USAGE
+if __name__ == "__main__":
+    import os
 
-import pandas as pd
-import matplotlib.pyplot as plt
-from eval import (
-    plot_multiclass_roc,
-    compute_confusion_matrix,
-    generate_classification_report
-)
+    model_fn = os.path.join(
+        os.path.dirname(
+                os.path.dirname(
+                    os.path.dirname(__file__)
+            )
+        ), 'data', 'best_model_classification_loss.pt'
+    )
+        
+    plot_latent_space(model_fn, 'test.png')
+    """
+    import pandas as pd
+    import matplotlib.pyplot as plt
+    from eval import (
+        plot_multiclass_roc,
+        compute_confusion_matrix,
+        generate_classification_report
+    )
 
-# Fake data
-df_probs = pd.DataFrame([
-    [0.1, 0.2, 0.05, 0.05, 0.1, 0.5],
-    [0.6, 0.1, 0.1, 0.05, 0.05, 0.1],
-    [0.2, 0.1, 0.3, 0.2, 0.1, 0.1],
-    [0.2, 0.1, 0.3, 0.2, 0.1, 0.1],
-    [0.2, 0.1, 0.3, 0.2, 0.1, 0.1],
-    [0.2, 0.1, 0.3, 0.2, 0.1, 0.1],
-    [0.2, 0.1, 0.3, 0.2, 0.1, 0.1],
-], columns=['A', 'B', 'C', 'D', 'E', 'F'])
+    # Fake data
+    df_probs = pd.DataFrame([
+        [0.1, 0.2, 0.05, 0.05, 0.1, 0.5],
+        [0.6, 0.1, 0.1, 0.05, 0.05, 0.1],
+        [0.2, 0.1, 0.3, 0.2, 0.1, 0.1],
+        [0.2, 0.1, 0.3, 0.2, 0.1, 0.1],
+        [0.2, 0.1, 0.3, 0.2, 0.1, 0.1],
+        [0.2, 0.1, 0.3, 0.2, 0.1, 0.1],
+        [0.2, 0.1, 0.3, 0.2, 0.1, 0.1],
+    ], columns=['A', 'B', 'C', 'D', 'E', 'F'])
 
-true_labels = ['F', 'A', 'C', 'D', 'E', 'B', 'A']
+    true_labels = ['F', 'A', 'C', 'D', 'E', 'B', 'A']
 
-# ROC Curve
-fig_roc = plot_multiclass_roc(df_probs, true_labels)
-fig_roc.show()
+    # ROC Curve
+    fig_roc = plot_multiclass_roc(df_probs, true_labels)
+    fig_roc.show()
 
-# Confusion Matrix
-cm, disp = compute_confusion_matrix(df_probs, true_labels)
-disp.plot(cmap='Blues')
-plt.show()
+    # Confusion Matrix
+    cm, disp = compute_confusion_matrix(df_probs, true_labels)
+    disp.plot(cmap='Blues')
+    plt.show()
 
-# Classification Report
-report = generate_classification_report(df_probs, true_labels)
-print(report)
-# %%
+    # Classification Report
+    report = generate_classification_report(df_probs, true_labels)
+    print(report)
+    # %%
+    """
