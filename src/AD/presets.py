@@ -9,6 +9,8 @@ from AD.custom_datasets.ZTF_sims import *
 device = "cuda" if torch.cuda.is_available() else "cpu"
 torch.set_default_device(device)
 
+NUM_CLASSES = 5
+
 def get_class_weights(labels):
 
     classes, counts = np.unique(labels, return_counts=True)
@@ -22,7 +24,7 @@ def get_class_weights(labels):
 def get_model(model_choice):
 
     if model_choice == "BTS-lite":
-        model = GRU(6)
+        model = GRU(NUM_CLASSES)
     return model
 
 
@@ -46,9 +48,10 @@ def get_train_loader(model_choice, batch_size, max_n_per_class, excluded_classes
     elif model_choice == "ZTFSims":
 
         # Load the training set
-        train_dataset = ZTF_SIM_LC_Dataset(ZTF_sim_train_parquet_path, include_lc_plots=False, max_n_per_class=max_n_per_class)
+        train_dataset = ZTF_SIM_LC_Dataset(ZTF_sim_train_parquet_path, include_lc_plots=False, max_n_per_class=max_n_per_class, excluded_classes=excluded_classes)
 
         train_labels = train_dataset.get_all_labels()
+
         class_weights = get_class_weights(train_labels)
         train_weights = torch.from_numpy(np.array([class_weights[x] for x in train_labels]))
         sampler = WeightedRandomSampler(train_weights, len(train_weights))
