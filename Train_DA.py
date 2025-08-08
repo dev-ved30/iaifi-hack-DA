@@ -399,6 +399,8 @@ def train_SIDDA(
             else:
                 no_improvement_count += 1
 
+            torch.save(model.eval().module.state_dict(), os.path.join(save_dir, f"epoch_{epoch}.pt"))
+
             if source_val_acc >= best_val_acc:
                 best_val_acc = source_val_acc
                 best_val_acc_epoch = epoch + 1
