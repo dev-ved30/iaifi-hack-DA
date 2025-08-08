@@ -74,7 +74,7 @@ def get_val_loader(model_choice, batch_size, excluded_classes=[]):
         train_weights = torch.from_numpy(np.array([class_weights[x] for x in val_labels]))
         sampler = WeightedRandomSampler(train_weights, len(train_weights))
 
-        val_dataloader = DataLoader(val_dataset, batch_size=batch_size, collate_fn=custom_collate_BTS, generator=generator, drop_last=True)
+        val_dataloader = DataLoader(val_dataset, batch_size=batch_size, collate_fn=custom_collate_BTS, generator=generator, drop_last=False)
 
     elif model_choice == "ZTFSims":
 
@@ -85,7 +85,7 @@ def get_val_loader(model_choice, batch_size, excluded_classes=[]):
         train_weights = torch.from_numpy(np.array([class_weights[x] for x in val_labels]))
         sampler = WeightedRandomSampler(train_weights, len(train_weights))
 
-        val_dataloader = DataLoader(val_dataset, batch_size=batch_size, collate_fn=custom_collate_ZTF_SIM, generator=generator, drop_last=True)
+        val_dataloader = DataLoader(val_dataset, batch_size=batch_size, collate_fn=custom_collate_ZTF_SIM, generator=generator, drop_last=False)
 
     val_labels = val_dataset.get_all_labels()
     return val_dataloader, val_labels
