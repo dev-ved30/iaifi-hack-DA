@@ -97,10 +97,10 @@ def train_SIDDA(
     optimizer: optim.Optimizer,
     model_name: str,
     scheduler: optim.lr_scheduler = None,
-    epochs: int = 100,
+    epochs: int = 1000,
     device: str = "cuda" if torch.cuda.is_available() else "cpu",
     save_dir: str = "checkpoints",
-    early_stopping_patience: int = 10,
+    early_stopping_patience: int = 100,
     report_interval: int = 1,
 ):
     if not os.path.exists(save_dir):
@@ -112,7 +112,7 @@ def train_SIDDA(
     else:
         model.to(device)
 
-    warmup = 0#!!!
+    warmup = 30#!!!
     print("Model Loaded to Device!")
     best_val_acc, best_classification_loss, best_DA_loss, best_total_val_loss = (
         0,
@@ -144,13 +144,14 @@ def train_SIDDA(
         for i, (batch, target_batch) in tqdm(
             enumerate(zip(train_dataloader, target_dataloader))
         ):
+
+            batch = {k: v.to(device) if torch.is_tensor(v) else v for k, v in batch.items()}
+            target_batch = {k: v.to(device) if torch.is_tensor(v) else v for k, v in target_batch.items()}
+
             source_inputs = batch
             source_outputs = batch['label']
             source_outputs = np.array([strname_to_classid[i] for i in source_outputs])
-            # source_inputs, source_outputs = (
-            #     source_inputs.to(device).float(),
-            #     source_outputs.to(device),
-            # )
+            source_outputs =  torch.from_numpy(source_outputs).to(device)
 
             target_inputs = target_batch
             #target_inputs = target_inputs.to(device).float()
@@ -159,7 +160,7 @@ def train_SIDDA(
 
             if epoch < warmup:
                 _, model_outputs = model(source_inputs)
-                classification_loss = F.cross_entropy(model_outputs, torch.from_numpy(source_outputs))
+                classification_loss = F.cross_entropy(model_outputs, source_outputs)
                 loss = classification_loss
                 DA_loss = None
             else:
@@ -171,7 +172,7 @@ def train_SIDDA(
 
 
                 classification_loss = F.cross_entropy(
-                    source_model_outputs, torch.from_numpy(source_outputs)
+                    source_model_outputs, source_outputs
                 )
 
                 pairwise_distances = torch.cdist(source_features, target_features, p=2)
@@ -264,9 +265,15 @@ def train_SIDDA(
                 for i, (batch, target_batch) in enumerate(
                     zip(val_dataloader, target_val_dataloader)
                 ):
+
+                    batch = {k: v.to(device) if torch.is_tensor(v) else v for k, v in batch.items()}
+                    target_batch = {k: v.to(device) if torch.is_tensor(v) else v for k, v in target_batch.items()}
+
                     source_inputs = batch
+                    
+                    
                     source_outputs = batch['label']
-                    source_outputs = np.array([strname_to_classid[i] for i in source_outputs])
+                    source_outputs = torch.from_numpy(np.array([strname_to_classid[i] for i in source_outputs])).to(device)
                     # source_inputs, source_outputs = (
                     #     source_inputs.to(device).float(),
                     #     source_outputs.to(device),
@@ -280,7 +287,7 @@ def train_SIDDA(
                     if epoch < warmup:
                         _, source_preds = model(source_inputs)
                         classification_loss_ = F.cross_entropy(
-                            source_preds, torch.from_numpy(source_outputs)
+                            source_preds, source_outputs
                         )
                         combined_loss = classification_loss_
                         DA_loss_ = 0.0
@@ -291,7 +298,7 @@ def train_SIDDA(
                         target_features, target_preds = model(target_inputs)  
 
                         classification_loss_ = F.cross_entropy(
-                            source_preds, torch.from_numpy(source_outputs)
+                            source_preds, source_outputs
                         )
 
                         pairwise_distances = torch.cdist(
@@ -316,7 +323,7 @@ def train_SIDDA(
                         val_DA_loss += DA_loss_.item()
 
                     _, source_predicted = torch.max(source_preds.data, 1)
-                    source_total += source_outputs.size
+                    source_total += len(source_outputs)
                     source_correct += (source_predicted == source_outputs).sum().item()
 
             source_val_acc = 100 * source_correct / source_total
