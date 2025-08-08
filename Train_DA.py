@@ -133,10 +133,12 @@ def train_SIDDA(
 
     print("Training Started!")
 
-    eta_1 = torch.nn.Parameter(torch.tensor(1.0, device=device))
-    eta_2 = torch.nn.Parameter(torch.tensor(1.0, device=device))
+    #eta_1 = torch.nn.Parameter(torch.tensor(1.0, device=device))
+    #eta_2 = torch.nn.Parameter(torch.tensor(1.0, device=device))
+    eta_1 = 1.0
+    eta_2 = 1.0
 
-    optimizer.add_param_group({"params": [eta_1, eta_2]})
+    #optimizer.add_param_group({"params": [eta_1, eta_2]})
 
     for epoch in range(epochs):
         model.train()
@@ -204,10 +206,10 @@ def train_SIDDA(
 
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=10.0)
-            eta_1.data.clamp_(min=1e-3)
-            eta_2.data.clamp_(min=0.25 * eta_1.data.item())
-            eta_1_vals.append(eta_1.item())
-            eta_2_vals.append(eta_2.item())
+            #eta_1.data.clamp_(min=1e-3)
+            #eta_2.data.clamp_(min=0.25 * eta_1)#.data.item())
+            eta_1_vals.append(eta_1)#.item())
+            eta_2_vals.append(eta_2)#.item())
             optimizer.step()
 
             train_loss += loss.item()
@@ -235,9 +237,11 @@ def train_SIDDA(
         steps.append(epoch + 1)
 
         if epoch >= warmup:
+            """
             print(
                 f"Epoch: {epoch + 1}, eta_1: {eta_1.item():.4f}, eta_2: {eta_2.item():.4f}"
             )
+            """
             print(f"Epoch: {epoch + 1}, Max Distance: {max_distance:.4f}")
 
         if epoch < warmup:
