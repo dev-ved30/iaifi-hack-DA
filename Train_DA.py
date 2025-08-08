@@ -12,6 +12,7 @@ import torch.nn as nn
 from pathlib import Path    
 from torch.utils.data import DataLoader, ConcatDataset
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
+from sklearn.metrics import f1_score
 
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -114,11 +115,12 @@ def train_SIDDA(
 
     warmup = 30#!!!
     print("Model Loaded to Device!")
-    best_val_acc, best_classification_loss, best_DA_loss, best_total_val_loss = (
+    best_val_acc, best_classification_loss, best_DA_loss, best_total_val_loss, best_val_f1 = (
         0,
         float("inf"),
         float("inf"),
         float("inf"),
+        0,
     )
     no_improvement_count = 0
     losses, steps = [], []
@@ -254,6 +256,8 @@ def train_SIDDA(
 
         if (epoch + 1) % report_interval == 0:
             model.eval()
+            y_pred = []
+            y_true = []
             source_correct, source_total, val_loss = (
                 0,
                 0,
@@ -281,7 +285,6 @@ def train_SIDDA(
 
                     target_inputs = target_batch
                     #target_inputs = target_inputs.to(device).float()
-
 
 
                     if epoch < warmup:
@@ -323,9 +326,13 @@ def train_SIDDA(
                         val_DA_loss += DA_loss_.item()
 
                     _, source_predicted = torch.max(source_preds.data, 1)
+                    y_pred.extend(source_predicted)
+                    y_true.extend(source_outputs)
+
                     source_total += len(source_outputs)
                     source_correct += (source_predicted == source_outputs).sum().item()
 
+            source_val_f1 = f1_score(np.array(y_true), np.array(y_pred), average='macro')
             source_val_acc = 100 * source_correct / source_total
 
             val_loss /= len(val_dataloader)
@@ -349,11 +356,17 @@ def train_SIDDA(
                     f"Epoch: {epoch + 1}, Total Validation Loss: {val_loss:.4f}, Source Validation Accuracy: {source_val_acc:.2f}%, Learning rate: {lr}"
                 )
                 print(
+                    f"Epoch: {epoch + 1}, Validation F1: {source_val_f1:.4e}"
+                )
+                print(
                     f"Epoch: {epoch + 1}, Validation Classification Loss: {val_classification_loss:.4e}"
                 )
             else:
                 print(
                     f"Epoch: {epoch + 1}, Total Validation Loss: {val_loss:.4f}, Source Validation Accuracy: {source_val_acc:.2f}%, Learning rate: {lr}"
+                )
+                print(
+                    f"Epoch: {epoch + 1}, Validation F1: {source_val_f1:.4e}"
                 )
                 print(
                     f"Epoch: {epoch + 1}, Validation Classification Loss: {val_classification_loss:.4e}, Validation DA Loss: {val_DA_loss:.4e}"
@@ -389,6 +402,18 @@ def train_SIDDA(
                     torch.save(model.eval().state_dict(), model_path)
                 print(
                     f"Saved best validation accuracy model at epoch {best_val_acc_epoch}"
+                )
+
+            if source_val_f1 >= best_val_f1:
+                best_val_f1 = source_val_f1
+                best_val_f1_epoch = epoch + 1
+                model_path = os.path.join(save_dir, "best_model_val_f1.pt")
+                if torch.cuda.device_count() > 1:
+                    torch.save(model.eval().module.state_dict(), model_path)
+                else:
+                    torch.save(model.eval().state_dict(), model_path)
+                print(
+                    f"Saved best validation F1 model at epoch {best_val_f1_epoch}"
                 )
 
             if val_classification_loss <= best_classification_loss and epoch >= warmup:
