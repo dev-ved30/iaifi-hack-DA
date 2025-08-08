@@ -3,7 +3,11 @@
 import numpy as np
 import pandas as pd
 import torch
+import seaborn as sns
 import matplotlib.pyplot as plt
+from palettable.cartocolors.qualitative import Vivid_6
+import umap
+print(umap.__file__)
 from sklearn.metrics import (
     roc_curve,
     auc,
@@ -123,15 +127,64 @@ def plot_latent_space(model_fn, save_fn):
     bts_dataloader = get_test_loaders("BTS-lite", 128, None, excluded_classes=['Anomaly'])
     ztf_dataloader = get_test_loaders("ZTFSims", 128, None, excluded_classes=['Anomaly'])
 
-    for k in bts_dataloader:
+    ztf_latents, bts_latents = [], []
+    ztf_labels, bts_labels = [], []
+    for k in ztf_dataloader:
+        ztf_labels.extend(k['label'])
         latent, _ = model(k)
-        print(latent)
-    # separate out model up to encoding layer
-    # out_source = encoder(source)
-    # out_target = encoder(target)
-    # get source labels and target labels
-    # get unique classes --> color map
+        ztf_latents.append(latent)
+    ztf_latents = torch.cat(ztf_latents, dim=0)
+
+    for k in bts_dataloader:
+        bts_labels.extend(k['label'])
+        latent, _ = model(k)
+        bts_latents.append(latent)
+    bts_latents = torch.cat(bts_latents, dim=0)
+    unique_labels, ztf_classes = np.unique(ztf_labels, return_inverse = True)
+    unique_labels, bts_classes = np.unique(bts_labels, return_inverse = True)
+
+    # apply UMAP
+    trans = umap.UMAP(n_neighbors=5, random_state=42).fit_transform(np.vstack([ztf_latents.cpu().detach().numpy(), bts_latents.cpu().detach().numpy()]))
+    print(trans.shape)
+
+    ztf_umap = trans[:len(ztf_latents)]
+    bts_umap = trans[len(ztf_latents):]
+
+    print(len(ztf_umap), len(bts_umap))
+
+    fig, ax = plt.subplots()
+    ax.set_prop_cycle('color', Vivid_6.mpl_colors)
+
     # plot source and target outputs
+    for i, l in enumerate(unique_labels):
+        ztf_umap_masked = ztf_umap[ztf_classes == i]
+        ztf_umap_df = pd.DataFrame(ztf_umap_masked, columns=['umap1', 'umap2'])
+        sns.kdeplot(
+            data=ztf_umap_df,
+            x="umap1", y="umap2",
+            levels=5,
+            label=l,
+            fill=True,
+            alpha=0.5,
+            ax=ax
+        )
+
+    for i, l in enumerate(unique_labels):
+        bts_umap_masked = bts_umap[bts_classes == i][:500]
+        ax.scatter(bts_umap_masked[:,0], bts_umap_masked[:,1], s=20, marker='*', label=l)
+
+    handles, _ = ax.get_legend_handles_labels()
+    num_handles = len(handles)
+    num_rows = (num_handles + 6 - 1) // 6
+    ax.legend(
+        loc="lower center",
+        bbox_to_anchor=(0.5, -0.25 - 0.05 * num_rows),
+        ncol=6,
+    )
+    ax.set_xlabel('UMAP 1')
+    ax.set_ylabel('UMAP 2')
+    plt.savefig("../../data/test_latent.pdf", bbox_inches='tight')
+
 
 
 
@@ -146,7 +199,7 @@ if __name__ == "__main__":
                 os.path.dirname(
                     os.path.dirname(__file__)
             )
-        ), 'data', 'best_model_classification_loss.pt'
+        ), 'data', 'best_model_val_f1.pt'
     )
         
     plot_latent_space(model_fn, 'test.png')
