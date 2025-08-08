@@ -7,7 +7,6 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 from palettable.cartocolors.qualitative import Vivid_6
 import umap
-print(umap.__file__)
 from sklearn.metrics import (
     roc_curve,
     auc,
@@ -19,6 +18,9 @@ from sklearn.metrics import (
 from sklearn.preprocessing import label_binarize
 from AD.architectures import GRU
 from AD.presets import get_test_loaders
+
+EXCLUDED_CLASSES = ['Anomaly', 'CV']
+NUM_CLASSES = 5
 
 # Functions
 def plot_multiclass_roc(df_probs, true_labels, class_names=None):
@@ -113,7 +115,7 @@ def generate_classification_report(df_probs, true_labels, class_names=None):
 
 def load_model(model_fn):
     """Load model from state dict."""
-    model = GRU(6)
+    model = GRU(NUM_CLASSES)
     model.load_state_dict(torch.load(model_fn, map_location=torch.device('cpu')), strict=False)
     model.eval
     return model
@@ -124,8 +126,8 @@ def plot_latent_space(model_fn, save_fn):
     """
     model = load_model(model_fn)
 
-    bts_dataloader = get_test_loaders("BTS-lite", 128, None, excluded_classes=['Anomaly'])
-    ztf_dataloader = get_test_loaders("ZTFSims", 128, None, excluded_classes=['Anomaly'])
+    bts_dataloader = get_test_loaders("BTS-lite", 128, None, excluded_classes=EXCLUDED_CLASSES)
+    ztf_dataloader = get_test_loaders("ZTFSims", 128, None, excluded_classes=EXCLUDED_CLASSES)
 
     ztf_latents, bts_latents = [], []
     ztf_labels, bts_labels = [], []
@@ -145,12 +147,9 @@ def plot_latent_space(model_fn, save_fn):
 
     # apply UMAP
     trans = umap.UMAP(n_neighbors=5, random_state=42).fit_transform(np.vstack([ztf_latents.cpu().detach().numpy(), bts_latents.cpu().detach().numpy()]))
-    print(trans.shape)
 
     ztf_umap = trans[:len(ztf_latents)]
     bts_umap = trans[len(ztf_latents):]
-
-    print(len(ztf_umap), len(bts_umap))
 
     fig, ax = plt.subplots()
     ax.set_prop_cycle('color', Vivid_6.mpl_colors)

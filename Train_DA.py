@@ -15,6 +15,9 @@ from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from sklearn.metrics import f1_score
 
 
+EXCLUDED_CLASSES = ['Anomaly', 'CV']
+NUM_CLASSES = 5
+
 device = "cuda" if torch.cuda.is_available() else "cpu"
 print(f"Using {device} device")
 torch.set_default_device(device)
@@ -25,11 +28,11 @@ torch.set_default_device(device)
 
 from AD.presets import get_train_loader, get_val_loader
 
-target_train_loader, _ = get_train_loader('BTS-lite',256,None,excluded_classes=['Anomaly'])
-target_val_loader, _ = get_val_loader('BTS-lite',256,excluded_classes=['Anomaly'])
+target_train_loader, _ = get_train_loader('BTS-lite',256,None,excluded_classes=EXCLUDED_CLASSES)
+target_val_loader, _ = get_val_loader('BTS-lite',256,excluded_classes=EXCLUDED_CLASSES)
 
-source_train_loader, _ = get_train_loader('ZTFSims',256,None,excluded_classes=['Anomaly'])
-source_val_loader, _ = get_val_loader('ZTFSims',256,excluded_classes=['Anomaly'])
+source_train_loader, _ = get_train_loader('ZTFSims',256,None,excluded_classes=EXCLUDED_CLASSES)
+source_val_loader, _ = get_val_loader('ZTFSims',256,excluded_classes=EXCLUDED_CLASSES)
 
 
 # In[ ]:
@@ -727,7 +730,7 @@ class GRU(Classifier):
 # In[10]:
 
 
-model = GRU(6)
+model = GRU(NUM_CLASSES)
 opt = torch.optim.AdamW(model.parameters(),1e-3)
 
 
